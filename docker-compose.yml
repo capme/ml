@@ -1,0 +1,70 @@
+version: '2'
+services:
+  dirs:
+    image: busybox:latest
+    volumes:
+      - ".:/app"
+      - "./etc/${APP_ENV}:/acom"
+      - "./etc/${APP_ENV}/php/php.ini:/usr/local/etc/php/conf.d/aditako.ini"
+
+  nginx:
+    image: nginx:1.11-alpine
+    working_dir: /app/public
+    volumes_from:
+      - dirs
+    links:
+      - webservice
+    ports:
+      - "${APP_PORT}:80"
+    command: nginx -c /acom/nginx/nginx.conf
+
+  cron:
+    image: acomcm/php-mysql
+    command: sh -c "crontab /app/crontab && crond -f -d 8"
+    volumes_from:
+      - dirs
+    links:
+      - db
+      - redissrv
+    working_dir: /app
+
+  jobs:
+    image: acomcm/php-mysql
+    command: php artisan queue:listen --sleep=3 --tries=3
+    volumes_from:
+      - dirs
+    working_dir: /app
+    links:
+      - db
+      - redissrv
+
+  webservice:
+    image: acomcm/php-mysql
+    expose:
+      - "9000"
+    volumes_from:
+      - dirs
+    links:
+      - db
+      - redissrv
+    command: php-fpm -y /acom/php/fpm.conf
+    working_dir: /app
+
+  db:
+    image: mysql:5.6
+    volumes:
+      - "./storage/mysql:/var/lib/mysql"
+    expose:
+      - "3306"
+    ports:
+      - "3309:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=nasigoren6kamb1n9
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_DATABASE}
+
+  redissrv:
+    image: redis:3.0
+    expose:
+      - "6379"
